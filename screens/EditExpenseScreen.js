@@ -1,5 +1,12 @@
 import React, { useState } from "react";
-import { View, TextInput, Text, TouchableOpacity, Alert, StyleSheet } from "react-native";
+import {
+  View,
+  TextInput,
+  Text,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+} from "react-native";
 import { useDispatch } from "react-redux";
 import { updateExpense } from "../slices/expensesSlice";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -12,7 +19,7 @@ const categories = [
   "Giải trí",
   "Hóa đơn",
   "Y tế",
-  "Khác"
+  "Khác",
 ];
 
 export default function EditExpenseScreen() {
@@ -30,50 +37,56 @@ export default function EditExpenseScreen() {
       return Alert.alert("Error", "Please enter title and amount");
     }
 
-    await dispatch(updateExpense({ 
-      id: expense.id,
-      title, 
-      amount: Number(amount), 
-      category,
-      date: expense.date, // Giữ nguyên ngày cũ, hoặc có thể cho sửa
-    }));
+    await dispatch(
+      updateExpense({
+        id: expense.id,
+        title,
+        amount: Number(amount),
+        category,
+        date: expense.date,
+      })
+    );
     navigation.goBack();
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Title</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter title"
-        value={title}
-        onChangeText={setTitle}
-      />
+      <View style={styles.card}>
+        <Text style={styles.header}>Chỉnh sửa chi tiêu</Text>
 
-      <Text style={styles.label}>Amount</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter amount"
-        keyboardType="numeric"
-        value={amount}
-        onChangeText={setAmount}
-      />
+        <Text style={styles.label}>Tiêu đề</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Nhập tiêu đề"
+          value={title}
+          onChangeText={setTitle}
+        />
 
-      <Text style={styles.label}>Category</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={category}
-          onValueChange={(itemValue) => setCategory(itemValue)}
-        >
-          {categories.map((cat, index) => (
-            <Picker.Item key={index} label={cat} value={cat} />
-          ))}
-        </Picker>
+        <Text style={styles.label}>Số tiền</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Ví dụ: 45000"
+          keyboardType="numeric"
+          value={amount}
+          onChangeText={setAmount}
+        />
+
+        <Text style={styles.label}>Danh mục</Text>
+        <View style={styles.pickerContainer}>
+          <Picker
+            selectedValue={category}
+            onValueChange={(itemValue) => setCategory(itemValue)}
+          >
+            {categories.map((cat, index) => (
+              <Picker.Item key={index} label={cat} value={cat} />
+            ))}
+          </Picker>
+        </View>
+
+        <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
+          <Text style={styles.updateButtonText}>Cập nhật</Text>
+        </TouchableOpacity>
       </View>
-
-      <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
-        <Text style={styles.updateButtonText}>Update Expense</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -81,36 +94,59 @@ export default function EditExpenseScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: "#eef2ff",
     padding: 20,
-    backgroundColor: "#f8fafc",
   },
+
+  card: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+
+  header: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: "#4f46e5",
+    textAlign: "center",
+  },
+
   label: {
     fontSize: 14,
-    color: "#111827",
     marginBottom: 6,
-    fontWeight: "bold",
+    fontWeight: "600",
+    color: "#374151",
   },
+
   input: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
+    borderColor: "#c7d2fe",
+    backgroundColor: "#f5f7ff",
     padding: 12,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 15,
-    backgroundColor: "#fff",
   },
+
   pickerContainer: {
     borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 10,
-    marginBottom: 15,
-    backgroundColor: "#fff",
-  },
-  updateButton: {
-    backgroundColor: "#34d399",
-    padding: 15,
+    borderColor: "#c7d2fe",
     borderRadius: 12,
+    marginBottom: 15,
+    backgroundColor: "#f5f7ff",
+  },
+
+  updateButton: {
+    backgroundColor: "#6366f1",
+    padding: 15,
+    borderRadius: 14,
     marginTop: 10,
   },
+
   updateButtonText: {
     color: "#fff",
     textAlign: "center",
