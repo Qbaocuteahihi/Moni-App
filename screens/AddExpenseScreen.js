@@ -31,15 +31,15 @@ export default function AddExpenseScreen() {
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState(categories[0]);
-  const [date, setDate] = useState(new Date().toISOString().split("T")[0]); // Ngày hiện tại
+  const [focusedInput, setFocusedInput] = useState(null);
 
   const handleAdd = async () => {
     if (!title.trim()) {
-      return Alert.alert("Lỗi", "Vui lòng nhập tiêu đề chi tiêu");
+      return Alert.alert("Thiếu thông tin", "Vui lòng nhập tiêu đề chi tiêu");
     }
 
     if (!amount || isNaN(amount) || Number(amount) <= 0) {
-      return Alert.alert("Lỗi", "Vui lòng nhập số tiền hợp lệ");
+      return Alert.alert("Số tiền không hợp lệ", "Vui lòng nhập số tiền lớn hơn 0");
     }
 
     try {
@@ -48,28 +48,38 @@ export default function AddExpenseScreen() {
           title: title.trim(),
           amount: Number(amount),
           category,
-          date: new Date().toISOString(), // Thêm ngày hiện tại
+          date: new Date().toISOString(),
         })
       ).unwrap();
 
       Alert.alert("Thành công", "Đã thêm chi tiêu mới", [
-        { text: "OK", onPress: () => navigation.goBack() },
+        { 
+          text: "Tiếp tục", 
+          style: "default", 
+          onPress: () => {
+            setTitle("");
+            setAmount("");
+            setCategory(categories[0]);
+          }
+        },
+        { 
+          text: "Xong", 
+          style: "cancel", 
+          onPress: () => navigation.goBack() 
+        },
       ]);
     } catch (error) {
       Alert.alert("Lỗi", "Không thể thêm chi tiêu. Vui lòng thử lại.");
     }
   };
 
-  const formatCurrency = (text) => {
-    // Xóa tất cả ký tự không phải số
-    const cleaned = text.replace(/[^\d]/g, "");
-    // Định dạng thành số có dấu phân cách
-    return cleaned ? parseInt(cleaned, 10).toLocaleString("vi-VN") : "";
+  const handleAmountChange = (text) => {
+    const cleaned = text.replace(/[^\d]/g, '');
+    setAmount(cleaned);
   };
 
-  const handleAmountChange = (text) => {
-    const cleaned = text.replace(/[^\d]/g, "");
-    setAmount(cleaned);
+  const formatAmount = (value) => {
+    return value ? parseInt(value).toLocaleString('vi-VN') : '';
   };
 
   return (
@@ -77,16 +87,16 @@ export default function AddExpenseScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Header với nút back */}
+      {/* Header Minimal */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Text style={styles.backButtonText}>×</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Thêm chi tiêu</Text>
-        <View style={styles.placeholder} />
+        <Text style={styles.headerTitle}>Thêm chi tiêu mới</Text>
+        <View style={styles.headerRight} />
       </View>
 
       <ScrollView
@@ -94,111 +104,143 @@ export default function AddExpenseScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.card}>
-          <View style={styles.formSection}>
-            <Text style={styles.sectionTitle}>Thông tin chi tiêu</Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Tiêu đề *</Text>
+        {/* Main Form */}
+        <View style={styles.formContainer}>
+          
+          {/* Amount Input - Featured */}
+          <View style={styles.amountSection}>
+            <Text style={styles.amountLabel}>Số tiền</Text>
+            <View style={[
+              styles.amountInputContainer,
+              focusedInput === 'amount' && styles.inputFocused
+            ]}>
               <TextInput
-                style={styles.input}
-                placeholder="Nhập mô tả chi tiêu..."
-                placeholderTextColor="#9ca3af"
-                value={title}
-                onChangeText={setTitle}
-                maxLength={50}
+                style={styles.amountInput}
+                placeholder="0"
+                placeholderTextColor="#94a3b8"
+                keyboardType="numeric"
+                value={formatAmount(amount)}
+                onChangeText={handleAmountChange}
+                onFocus={() => setFocusedInput('amount')}
+                onBlur={() => setFocusedInput(null)}
               />
-              <Text style={styles.charCount}>{title.length}/50</Text>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Số tiền (VND) *</Text>
-              <View style={styles.amountContainer}>
-                <TextInput
-                  style={[styles.input, styles.amountInput]}
-                  placeholder="0"
-                  placeholderTextColor="#9ca3af"
-                  keyboardType="numeric"
-                  value={amount ? parseInt(amount).toLocaleString("vi-VN") : ""}
-                  onChangeText={handleAmountChange}
-                />
-                <Text style={styles.currencyText}>VND</Text>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Danh mục</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={category}
-                  onValueChange={(itemValue) => setCategory(itemValue)}
-                  style={styles.picker}
-                  dropdownIconColor="#6b7280"
-                >
-                  {categories.map((cat, index) => (
-                    <Picker.Item key={index} label={cat} value={cat} />
-                  ))}
-                </Picker>
-              </View>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Ngày</Text>
-              <TextInput
-                style={styles.input}
-                value={new Date().toLocaleDateString("vi-VN")}
-                editable={false}
-              />
-              <Text style={styles.dateNote}>Tự động lấy ngày hiện tại</Text>
+              <Text style={styles.currencyText}>VND</Text>
             </View>
           </View>
 
-          {/* Summary Preview */}
-          {(title || amount) && (
-            <View style={styles.previewSection}>
-              <Text style={styles.previewTitle}>Xem trước</Text>
-              <View style={styles.previewCard}>
-                <Text style={styles.previewItem} numberOfLines={1}>
-                  <Text style={styles.previewLabel}>Tiêu đề: </Text>
-                  {title || "Chưa có"}
-                </Text>
-                <Text style={styles.previewItem}>
-                  <Text style={styles.previewLabel}>Số tiền: </Text>
-                  {amount
-                    ? `${parseInt(amount).toLocaleString("vi-VN")} VND`
-                    : "0 VND"}
-                </Text>
-                <Text style={styles.previewItem}>
-                  <Text style={styles.previewLabel}>Danh mục: </Text>
-                  {category}
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Action Buttons */}
-          <View style={styles.buttonGroup}>
-            <TouchableOpacity
-              style={[styles.button, styles.cancelButton]}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.cancelButtonText}>Hủy bỏ</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
+          {/* Title Input */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Mô tả</Text>
+            <TextInput
               style={[
-                styles.button,
-                styles.addButton,
-                (!title || !amount) && styles.disabledButton,
+                styles.input,
+                focusedInput === 'title' && styles.inputFocused
               ]}
-              onPress={handleAdd}
-              disabled={!title || !amount}
-            >
-              <Text style={styles.addButtonText}>💾 Lưu chi tiêu</Text>
-            </TouchableOpacity>
+              placeholder="Nhập mô tả chi tiêu..."
+              placeholderTextColor="#94a3b8"
+              value={title}
+              onChangeText={setTitle}
+              maxLength={50}
+              onFocus={() => setFocusedInput('title')}
+              onBlur={() => setFocusedInput(null)}
+            />
+            <Text style={styles.charCount}>{title.length}/50</Text>
           </View>
+
+          {/* Category Picker */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Danh mục</Text>
+            <View style={[
+              styles.pickerContainer,
+              focusedInput === 'category' && styles.inputFocused
+            ]}>
+              <Picker
+                selectedValue={category}
+                onValueChange={setCategory}
+                style={styles.picker}
+                dropdownIconColor="#64748b"
+                onFocus={() => setFocusedInput('category')}
+                onBlur={() => setFocusedInput(null)}
+              >
+                {categories.map((cat, index) => (
+                  <Picker.Item 
+                    key={index} 
+                    label={cat} 
+                    value={cat} 
+                    color="#1e293b"
+                  />
+                ))}
+              </Picker>
+            </View>
+          </View>
+
+          {/* Date Info */}
+          <View style={styles.dateInfo}>
+            <Text style={styles.dateLabel}>Ngày thêm</Text>
+            <Text style={styles.dateValue}>
+              {new Date().toLocaleDateString('vi-VN', { 
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              })}
+            </Text>
+          </View>
+
+          {/* Quick Actions */}
+          <View style={styles.quickAmounts}>
+            <Text style={styles.quickLabel}>Chọn nhanh</Text>
+            <View style={styles.amountChips}>
+              {[50000, 100000, 200000, 500000].map((quickAmount) => (
+                <TouchableOpacity
+                  key={quickAmount}
+                  style={[
+                    styles.amountChip,
+                    amount === quickAmount.toString() && styles.amountChipActive
+                  ]}
+                  onPress={() => setAmount(quickAmount.toString())}
+                >
+                  <Text style={[
+                    styles.amountChipText,
+                    amount === quickAmount.toString() && styles.amountChipTextActive
+                  ]}>
+                    {quickAmount.toLocaleString('vi-VN')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
         </View>
       </ScrollView>
+
+      {/* Fixed Action Button */}
+      <View style={styles.actionBar}>
+        <View style={styles.preview}>
+          {title && (
+            <Text style={styles.previewTitle} numberOfLines={1}>
+              {title}
+            </Text>
+          )}
+          {amount && (
+            <Text style={styles.previewAmount}>
+              {formatAmount(amount)} VND
+            </Text>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.addButton,
+            (!title || !amount) && styles.addButtonDisabled
+          ]}
+          onPress={handleAdd}
+          disabled={!title || !amount}
+        >
+          <Text style={styles.addButtonText}>
+            {!title || !amount ? "Thêm chi tiêu" : `Thêm • ${formatAmount(amount)} VND`}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -216,168 +258,213 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: "#f1f5f9",
   },
   backButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f1f5f9",
+    justifyContent: "center",
+    alignItems: "center",
   },
   backButtonText: {
-    fontSize: 24,
-    color: "#374151",
+    fontSize: 20,
+    color: "#64748b",
+    fontWeight: "300",
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600",
-    color: "#1f2937",
+    color: "#1e293b",
   },
-  placeholder: {
+  headerRight: {
     width: 40,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
+    paddingBottom: 100, // Space for action bar
+  },
+  formContainer: {
     padding: 20,
   },
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 5,
+  // Amount Section
+  amountSection: {
+    marginBottom: 32,
   },
-  formSection: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#1f2937",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
+  amountLabel: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: 8,
+    fontWeight: "500",
+    color: "#64748b",
+    marginBottom: 12,
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    backgroundColor: "#f9fafb",
-    padding: 16,
-    borderRadius: 12,
-    fontSize: 16,
-    color: "#1f2937",
-  },
-  amountContainer: {
+  amountInputContainer: {
     flexDirection: "row",
     alignItems: "center",
+    borderBottomWidth: 2,
+    borderBottomColor: "#e2e8f0",
+    paddingVertical: 8,
   },
   amountInput: {
     flex: 1,
-    marginRight: 12,
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#1e293b",
+    paddingVertical: 8,
   },
   currencyText: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "600",
-    color: "#374151",
-    minWidth: 50,
+    color: "#64748b",
+    marginLeft: 8,
   },
-  pickerContainer: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
+  // Input Groups
+  inputGroup: {
+    marginBottom: 24,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#64748b",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#fff",
+    padding: 16,
     borderRadius: 12,
-    backgroundColor: "#f9fafb",
-    overflow: "hidden",
+    fontSize: 16,
+    color: "#1e293b",
+    fontWeight: "500",
   },
-  picker: {
-    height: 50,
+  inputFocused: {
+    borderColor: "#3b82f6",
+    backgroundColor: "#f8fafc",
   },
   charCount: {
     textAlign: "right",
     fontSize: 12,
-    color: "#9ca3af",
+    color: "#94a3b8",
     marginTop: 4,
   },
-  dateNote: {
-    fontSize: 12,
-    color: "#6b7280",
-    marginTop: 4,
-    fontStyle: "italic",
+  // Picker
+  pickerContainer: {
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    overflow: "hidden",
   },
-  previewSection: {
+  picker: {
+    height: 56,
+  },
+  // Date Info
+  dateInfo: {
+    backgroundColor: "#f1f5f9",
+    padding: 16,
+    borderRadius: 12,
     marginBottom: 24,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
   },
-  previewTitle: {
-    fontSize: 16,
+  dateLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  dateValue: {
+    fontSize: 15,
     fontWeight: "600",
-    color: "#374151",
+    color: "#1e293b",
+  },
+  // Quick Amounts
+  quickAmounts: {
+    marginBottom: 24,
+  },
+  quickLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#64748b",
     marginBottom: 12,
   },
-  previewCard: {
-    backgroundColor: "#f8fafc",
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  previewItem: {
-    fontSize: 14,
-    color: "#374151",
-    marginBottom: 6,
-  },
-  previewLabel: {
-    fontWeight: "600",
-    color: "#6b7280",
-  },
-  buttonGroup: {
+  amountChips: {
     flexDirection: "row",
-    gap: 12,
+    flexWrap: "wrap",
+    gap: 8,
   },
-  button: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
+  amountChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: "#e2e8f0",
+    borderRadius: 20,
   },
-  cancelButton: {
-    backgroundColor: "#f3f4f6",
-    borderWidth: 1,
-    borderColor: "#d1d5db",
+  amountChipActive: {
+    backgroundColor: "#3b82f6",
+    borderColor: "#3b82f6",
   },
-  cancelButtonText: {
-    fontSize: 16,
+  amountChipText: {
+    fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: "#64748b",
+  },
+  amountChipTextActive: {
+    color: "#fff",
+  },
+  // Action Bar
+  actionBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  preview: {
+    marginBottom: 12,
+  },
+  previewTitle: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  previewAmount: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1e293b",
+    textAlign: "center",
   },
   addButton: {
-    backgroundColor: "#10b981",
-    shadowColor: "#10b981",
+    backgroundColor: "#3b82f6",
+    padding: 18,
+    borderRadius: 14,
+    alignItems: "center",
+    shadowColor: "#3b82f6",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 4,
   },
-  disabledButton: {
-    backgroundColor: "#9ca3af",
+  addButtonDisabled: {
+    backgroundColor: "#cbd5e1",
     shadowOpacity: 0,
     elevation: 0,
   },
   addButtonText: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
-    color: "#fff",
   },
 });
