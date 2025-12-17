@@ -1,12 +1,5 @@
-
 import React from "react";
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Alert  // THÊM DÒNG NÀY
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { ProgressBar } from "react-native-paper";
 import { useSelector } from "react-redux";
 import monthlyManager from "../utils/monthlyManager";
@@ -15,13 +8,35 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
   const expenses = useSelector((state) => state.expenses?.items || []);
   const incomes = useSelector((state) => state.incomes?.items || []);
 
+  // Hàm định dạng số tiền - THÊM HÀM NÀY
+  const formatCurrency = (amount, showFull = false) => {
+    // Nếu showFull = true, hiển thị đầy đủ với VND
+    if (showFull) {
+      return amount.toLocaleString("vi-VN") + " VND";
+    }
+
+    // Định dạng cho số lớn
+    if (amount >= 1000000000) {
+      // Tỷ
+      return (amount / 1000000000).toFixed(1).replace(".", ",") + " tỷ";
+    } else if (amount >= 1000000) {
+      // Triệu
+      return (amount / 1000000).toFixed(1).replace(".", ",") + " tr";
+    } else if (amount >= 1000) {
+      // Nghìn
+      return (amount / 1000).toFixed(1).replace(".", ",") + "k";
+    }
+
+    // Dưới 1000 thì hiển thị đầy đủ
+    return amount.toLocaleString("vi-VN");
+  };
+
   // Lấy tháng hiện tại
   const currentMonth = monthlyManager.getCurrentMonthInfo();
   const currentMonthId = currentMonth?.id || "";
 
-  // Tính toán dữ liệu - THÊM KIỂM TRA UNDEFINED
+  // Tính toán dữ liệu
   const calculateFinancialData = () => {
-    // Đảm bảo expenses và incomes là array
     const safeExpenses = Array.isArray(expenses) ? expenses : [];
     const safeIncomes = Array.isArray(incomes) ? incomes : [];
 
@@ -67,14 +82,6 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
       daysPassed > 0 ? (totalExpenses / daysPassed) * totalDays : 0;
     const projectedBalance = totalIncomes - projectedExpense;
 
-    // Phân loại thu nhập
-    const incomeByCategory = {};
-    monthIncomes.forEach((income) => {
-      const category = income.category || "Khác";
-      incomeByCategory[category] =
-        (incomeByCategory[category] || 0) + (income.amount || 0);
-    });
-
     return {
       totalIncomes,
       totalExpenses,
@@ -83,7 +90,6 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
       dayPercentage,
       projectedExpense,
       projectedBalance,
-      incomeByCategory,
       daysPassed,
       totalDays,
       monthExpensesCount: monthExpenses.length,
@@ -110,9 +116,9 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
     if (data.projectedBalance < 0) {
       return {
         type: "warning",
-        message: `⚠️ Nếu tiếp tục, cuối tháng sẽ âm ${Math.abs(
-          data.projectedBalance
-        ).toLocaleString()} VND`,
+        message: `⚠️ Nếu tiếp tục, cuối tháng sẽ âm ${formatCurrency(
+          Math.abs(data.projectedBalance)
+        )}`,
       };
     }
     return { type: "success", message: "✅ Bạn đang kiểm soát tài chính tốt!" };
@@ -121,17 +127,17 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
   // Hàm xử lý khi nhấn "Xem tất cả chi tiêu"
   const handleViewAllExpenses = () => {
     if (setActiveTab) {
-      // Chuyển sang tab "list" trong HomeScreen
       setActiveTab("list");
     } else {
-      // Fallback: hiển thị thông báo nếu setActiveTab không có
-      Alert.alert("Thông báo", "Không thể chuyển tab: setActiveTab prop bị thiếu");
+      Alert.alert(
+        "Thông báo",
+        "Không thể chuyển tab: setActiveTab prop bị thiếu"
+      );
     }
   };
 
   // Hàm xử lý khi nhấn "Xem tất cả thu nhập"
   const handleViewAllIncomes = () => {
-    // Hiển thị thông báo
     Alert.alert(
       "Xem tất cả thu nhập",
       "Chức năng xem tất cả thu nhập đang được phát triển",
@@ -152,7 +158,9 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
       {/* Header tổng quan */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>💰 Tổng quan tài chính</Text>
-        <Text style={styles.headerSubtitle}>{currentMonth?.name || "Tháng hiện tại"}</Text>
+        <Text style={styles.headerSubtitle}>
+          {currentMonth?.name || "Tháng hiện tại"}
+        </Text>
       </View>
 
       {/* Cảnh báo */}
@@ -175,7 +183,7 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Thu nhập</Text>
             <Text style={styles.statValueIncome}>
-              {data.totalIncomes.toLocaleString("vi-VN")} VND
+              {formatCurrency(data.totalIncomes, true)}
             </Text>
             <TouchableOpacity
               style={styles.addButton}
@@ -195,7 +203,7 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Chi tiêu</Text>
             <Text style={styles.statValueExpense}>
-              {data.totalExpenses.toLocaleString("vi-VN")} VND
+              {formatCurrency(data.totalExpenses, true)}
             </Text>
             <Text style={styles.statSubtext}>
               {data.monthExpensesCount} giao dịch
@@ -220,7 +228,7 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
                 : styles.balanceNegative,
             ]}
           >
-            {data.balance.toLocaleString("vi-VN")} VND
+            {formatCurrency(data.balance, true)}
           </Text>
           <Text style={styles.balanceSubtext}>
             {data.balance >= 0
@@ -273,7 +281,7 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
           <View style={styles.forecastItem}>
             <Text style={styles.forecastLabel}>Chi tiêu dự kiến</Text>
             <Text style={styles.forecastValue}>
-              {data.projectedExpense.toLocaleString("vi-VN")} VND
+              {formatCurrency(data.projectedExpense)}
             </Text>
           </View>
           <View style={styles.forecastItem}>
@@ -286,7 +294,7 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
                   : styles.forecastNegative,
               ]}
             >
-              {data.projectedBalance.toLocaleString("vi-VN")} VND
+              {formatCurrency(data.projectedBalance)}
             </Text>
           </View>
         </View>
@@ -298,7 +306,7 @@ const FinancialOverview = ({ navigation, setActiveTab }) => {
           <Text style={styles.savingsTitle}>🎯 Tỷ lệ tiết kiệm</Text>
           <View style={styles.savingsContent}>
             <Text style={styles.savingsPercentage}>
-              {Math.max(0, data.balance).toLocaleString("vi-VN")} VND (
+              {formatCurrency(Math.max(0, data.balance), true)} (
               {((Math.max(0, data.balance) / data.totalIncomes) * 100).toFixed(
                 1
               )}

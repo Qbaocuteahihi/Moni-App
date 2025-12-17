@@ -23,6 +23,14 @@ class BudgetManager {
     if (Object.keys(this.budgets).length === 0) {
       await this.setupDefaultBudgets();
     }
+    
+    // Đảm bảo spent = 0 khi khởi tạo (tính từ expenses real-time)
+    await this.resetSpentValues();
+  }
+
+  getCurrentMonthKey() {
+    const now = new Date();
+    return `monthly_spending_${now.getFullYear()}_${now.getMonth() + 1}`;
   }
 
   async loadBudgets() {
@@ -35,12 +43,22 @@ class BudgetManager {
     }
   }
 
+  async resetSpentValues() {
+    // Reset spent về 0 (sẽ tính toán real-time từ expenses)
+    Object.keys(this.budgets).forEach(categoryId => {
+      if (this.budgets[categoryId]) {
+        this.budgets[categoryId].spent = 0;
+      }
+    });
+    await this.saveBudgets();
+  }
+
   async setupDefaultBudgets() {
     this.defaultCategories.forEach(category => {
       this.budgets[category.id] = {
         ...category,
         monthlyBudget: 0,
-        spent: 0,
+        spent: 0, // Luôn bắt đầu từ 0
         notifications: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -71,18 +89,34 @@ class BudgetManager {
     return false;
   }
 
-  async addExpenseToCategory(categoryName, amount) {
-    const category = this.defaultCategories.find(c => c.name === categoryName);
-    if (category && this.budgets[category.id]) {
-      this.budgets[category.id].spent += amount;
-      this.budgets[category.id].updatedAt = new Date().toISOString();
-      await this.saveBudgets();
-      
-      // Kiểm tra cảnh báo
-      const warning = this.checkBudgetWarning(category.id);
-      return { success: true, warning };
+  // Hàm mới: Tính toán chi tiêu từ expenses thực tế
+  async calculateSpendingFromExpenses(expenses) {
+    // Reset spent về 0 trước khi tính toán
+    await this.resetSpentValues();
+    
+    if (!expenses || !Array.isArray(expenses)) {
+      console.log('📊 No expenses to calculate');
+      return;
     }
-    return { success: false };
+    
+    // Tính tổng chi tiêu theo category
+    const categoryTotals = {};
+    expenses.forEach(expense => {
+      if (expense.category && expense.amount) {
+        categoryTotals[expense.category] = (categoryTotals[expense.category] || 0) + expense.amount;
+      }
+    });
+    
+    // Cập nhật vào budgets
+    Object.keys(categoryTotals).forEach(categoryName => {
+      const category = this.defaultCategories.find(c => c.name === categoryName);
+      if (category && this.budgets[category.id]) {
+        this.budgets[category.id].spent = categoryTotals[categoryName];
+      }
+    });
+    
+    await this.saveBudgets();
+    console.log('📈 Calculated spending from expenses');
   }
 
   checkBudgetWarning(categoryId) {
@@ -122,14 +156,15 @@ class BudgetManager {
         spent: 0,
       };
       
+      const spent = budget.spent || 0;
       const percentage = budget.monthlyBudget > 0 ? 
-        Math.min((budget.spent / budget.monthlyBudget) * 100, 100) : 0;
+        Math.min((spent / budget.monthlyBudget) * 100, 100) : 0;
       
       return {
         ...budget,
         percentage,
-        remaining: Math.max(budget.monthlyBudget - budget.spent, 0),
-        isOverBudget: budget.spent > budget.monthlyBudget,
+        remaining: Math.max(budget.monthlyBudget - spent, 0),
+        isOverBudget: spent > budget.monthlyBudget,
       };
     });
   }
@@ -144,11 +179,12 @@ class BudgetManager {
   }
 
   resetMonthlySpending() {
+    // Chỉ reset spent, giữ nguyên monthlyBudget
     Object.keys(this.budgets).forEach(categoryId => {
       this.budgets[categoryId].spent = 0;
     });
     this.saveBudgets();
-    console.log('🔄 Monthly spending reset');
+    console.log('🔄 Monthly spending reset (spent = 0)');
   }
 
   getBudgetRecommendations(totalIncome) {

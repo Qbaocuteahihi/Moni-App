@@ -18,10 +18,24 @@ const DailyTracker = () => {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState('week'); // 'week' or 'month'
 
+  // Format số tiền thông minh
+  const formatSmartCurrency = (amount) => {
+    if (amount === 0) return '0 ₫';
+    
+    if (amount >= 1000000000) {
+      return `${(amount / 1000000000).toFixed(1)} tỷ`;
+    } else if (amount >= 1000000) {
+      return `${(amount / 1000000).toFixed(1)} tr`;
+    } else if (amount >= 1000) {
+      return `${(amount / 1000).toFixed(0)}k`;
+    }
+    return amount.toLocaleString('vi-VN') + ' ₫';
+  };
+
   // Lấy dữ liệu chi tiêu tháng hiện tại
   const currentMonth = monthlyManager.getCurrentMonthInfo();
-  const monthExpenses = expenses.filter(e => e.monthId === currentMonth.id);
-  const monthIncomes = incomes.filter(i => i.monthId === currentMonth.id);
+  const monthExpenses = expenses.filter(e => e.monthId === currentMonth?.id);
+  const monthIncomes = incomes.filter(i => i.monthId === currentMonth?.id);
 
   // Phân tích chi tiêu theo ngày
   const getDailyData = () => {
@@ -29,7 +43,7 @@ const DailyTracker = () => {
     
     monthExpenses.forEach(expense => {
       const date = new Date(expense.date);
-      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+      const dateStr = date.toISOString().split('T')[0];
       
       if (!dailyData[dateStr]) {
         dailyData[dateStr] = {
@@ -38,11 +52,13 @@ const DailyTracker = () => {
           totalExpense: 0,
           incomes: [],
           totalIncome: 0,
+          expenseCount: 0,
         };
       }
       
       dailyData[dateStr].expenses.push(expense);
       dailyData[dateStr].totalExpense += expense.amount;
+      dailyData[dateStr].expenseCount++;
     });
     
     monthIncomes.forEach(income => {
@@ -56,6 +72,7 @@ const DailyTracker = () => {
           totalExpense: 0,
           incomes: [],
           totalIncome: 0,
+          expenseCount: 0,
         };
       }
       
@@ -82,6 +99,7 @@ const DailyTracker = () => {
         totalExpense: 0,
         incomes: [],
         totalIncome: 0,
+        expenseCount: 0,
       };
       
       result.push(dayData);
@@ -93,11 +111,12 @@ const DailyTracker = () => {
 
   // Tìm ngày chi mạnh nhất
   const findMaxSpendingDay = () => {
-    if (dailyData.length === 0) return null;
+    const daysWithExpenses = dailyData.filter(day => day.totalExpense > 0);
+    if (daysWithExpenses.length === 0) return null;
     
-    return dailyData.reduce((max, day) => 
+    return daysWithExpenses.reduce((max, day) => 
       day.totalExpense > max.totalExpense ? day : max
-    , dailyData[0]);
+    , daysWithExpenses[0]);
   };
 
   const maxSpendingDay = findMaxSpendingDay();
@@ -136,30 +155,55 @@ const DailyTracker = () => {
   const prepareChartData = () => {
     const labels = last7Days.map(day => {
       const date = new Date(day.date);
-      return `${date.getDate()}/${date.getMonth() + 1}`;
+      return date.getDate().toString();
     });
     
-    const expenseData = last7Days.map(day => day.totalExpense / 1000); // Chia 1000 để giảm scale
-    const incomeData = last7Days.map(day => day.totalIncome / 1000);
+    const expenseData = last7Days.map(day => day.totalExpense);
+    const incomeData = last7Days.map(day => day.totalIncome);
+    
+    // Tìm giá trị lớn nhất để scale
+    const allValues = [...expenseData, ...incomeData];
+    const maxValue = Math.max(...allValues.filter(v => !isNaN(v)));
+    
+    // Scale xuống để hiển thị đẹp
+    let divisor = 1000;
+    if (maxValue >= 10000000) {
+      divisor = 1000000;
+    } else if (maxValue >= 100000) {
+      divisor = 10000;
+    }
     
     return {
       labels,
       datasets: [
         {
-          data: expenseData,
+          data: expenseData.map(v => v / divisor),
           color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`,
-          strokeWidth: 2,
+          strokeWidth: 3,
         },
         {
-          data: incomeData,
+          data: incomeData.map(v => v / divisor),
           color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
-          strokeWidth: 2,
+          strokeWidth: 3,
         },
       ],
+      divisor,
     };
   };
 
   const chartData = prepareChartData();
+
+  // Định dạng Y label thông minh
+  const formatYLabel = (value, divisor) => {
+    const actualValue = value * divisor;
+    
+    if (actualValue >= 1000000) {
+      return `${(actualValue / 1000000).toFixed(0)}tr`;
+    } else if (actualValue >= 1000) {
+      return `${(actualValue / 1000).toFixed(0)}k`;
+    }
+    return actualValue.toString();
+  };
 
   // Định dạng ngày
   const formatDate = (dateStr) => {
@@ -173,20 +217,97 @@ const DailyTracker = () => {
     } else if (date.toDateString() === yesterday.toDateString()) {
       return 'Hôm qua';
     } else {
-      return date.toLocaleDateString('vi-VN', { 
-        weekday: 'short',
-        day: 'numeric',
-        month: 'numeric'
-      });
+      const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+      const dayOfWeek = days[date.getDay()];
+      return `${dayOfWeek} ${date.getDate()}`;
     }
   };
 
+  // Format ngày đầy đủ
+  const formatFullDate = (dateStr) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('vi-VN', { 
+      weekday: 'long',
+      day: 'numeric',
+      month: 'numeric'
+    });
+  };
+
+  // Tính toán ngày trong tháng
+  const getMonthDaysData = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    
+    // Lấy số ngày trong tháng
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    const monthData = [];
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const dayData = dailyData.find(d => d.date === dateStr) || {
+        date: dateStr,
+        totalExpense: 0,
+        totalIncome: 0,
+        expenseCount: 0,
+      };
+      
+      monthData.push({
+        day,
+        date: dateStr,
+        ...dayData,
+      });
+    }
+    
+    return monthData.slice(-31); // Lấy 31 ngày gần nhất
+  };
+
+  const monthDaysData = getMonthDaysData();
+
+  // Tính các thống kê cho tháng
+  const getMonthStats = () => {
+    const today = new Date();
+    const month = today.getMonth();
+    const monthStart = new Date(today.getFullYear(), month, 1);
+    
+    const monthExp = monthExpenses.filter(e => {
+      const expenseDate = new Date(e.date);
+      return expenseDate >= monthStart;
+    });
+    
+    const monthInc = monthIncomes.filter(i => {
+      const incomeDate = new Date(i.date);
+      return incomeDate >= monthStart;
+    });
+    
+    const totalExpense = monthExp.reduce((sum, e) => sum + e.amount, 0);
+    const totalIncome = monthInc.reduce((sum, i) => sum + i.amount, 0);
+    const daysPassed = Math.min(today.getDate(), 31);
+    const avgDailyExpense = totalExpense / daysPassed;
+    
+    return {
+      totalExpense,
+      totalIncome,
+      avgDailyExpense,
+      expenseCount: monthExp.length,
+      incomeCount: monthInc.length,
+      daysPassed,
+    };
+  };
+
+  const monthStats = getMonthStats();
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>📅 Lịch sử theo ngày</Text>
-        <Text style={styles.subtitle}>Theo dõi chi tiêu hàng ngày</Text>
+        <Text style={styles.title}>📅 Theo dõi hàng ngày</Text>
+        <Text style={styles.subtitle}>
+          {viewMode === 'week' ? '7 ngày gần nhất' : 'Tháng này'}
+        </Text>
       </View>
 
       {/* Toggle view mode */}
@@ -196,7 +317,7 @@ const DailyTracker = () => {
           onPress={() => setViewMode('week')}
         >
           <Text style={[styles.toggleText, viewMode === 'week' && styles.toggleTextActive]}>
-            Tuần này
+            Tuần
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -204,24 +325,34 @@ const DailyTracker = () => {
           onPress={() => setViewMode('month')}
         >
           <Text style={[styles.toggleText, viewMode === 'month' && styles.toggleTextActive]}>
-            Tháng này
+            Tháng
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Biểu đồ chi tiêu hàng ngày */}
+      {/* Biểu đồ */}
       <View style={styles.chartContainer}>
-        <Text style={styles.chartTitle}>Chi tiêu & thu nhập 7 ngày qua</Text>
+        <Text style={styles.chartTitle}>
+          {viewMode === 'week' ? '7 ngày qua' : 'Tháng này'}
+        </Text>
         <LineChart
-          data={chartData}
-          width={Dimensions.get('window').width - 48}
+          data={viewMode === 'week' ? chartData : {
+            labels: monthDaysData.map(d => d.day.toString()),
+            datasets: [{
+              data: monthDaysData.map(d => d.totalExpense / 1000),
+              color: (opacity = 1) => `rgba(239, 68, 68, ${opacity})`,
+              strokeWidth: 2,
+            }],
+            divisor: 1000,
+          }}
+          width={Dimensions.get('window').width - 32}
           height={220}
           chartConfig={{
             backgroundColor: '#ffffff',
             backgroundGradientFrom: '#ffffff',
             backgroundGradientTo: '#ffffff',
-            decimalPlaces: 1,
-            color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+            decimalPlaces: 0,
+            color: (opacity = 1) => `rgba(75, 85, 99, ${opacity})`,
             labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
             style: {
               borderRadius: 16,
@@ -230,112 +361,183 @@ const DailyTracker = () => {
               r: '4',
               strokeWidth: '2',
             },
+            propsForLabels: {
+              fontSize: 10,
+            },
+            propsForBackgroundLines: {
+              strokeWidth: 1,
+              stroke: '#e5e7eb',
+            },
           }}
           bezier
           style={{
             marginVertical: 8,
             borderRadius: 16,
           }}
-          formatYLabel={(value) => `${Math.round(value * 1000).toLocaleString()}`}
+          formatYLabel={(value) => {
+            const divisor = viewMode === 'week' ? chartData.divisor : 1000;
+            return formatYLabel(value, divisor);
+          }}
+          segments={4}
+          withInnerLines={true}
         />
+        
         <View style={styles.chartLegend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#ef4444' }]} />
-            <Text style={styles.legendText}>Chi tiêu</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#10b981' }]} />
-            <Text style={styles.legendText}>Thu nhập</Text>
-          </View>
+          {viewMode === 'week' ? (
+            <>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendColor, { backgroundColor: '#ef4444' }]} />
+                <Text style={styles.legendText}>Chi tiêu</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendColor, { backgroundColor: '#10b981' }]} />
+                <Text style={styles.legendText}>Thu nhập</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.legendItem}>
+              <View style={[styles.legendColor, { backgroundColor: '#ef4444' }]} />
+              <Text style={styles.legendText}>Chi tiêu hàng ngày</Text>
+            </View>
+          )}
         </View>
       </View>
 
-      {/* Tổng quan tuần */}
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>📊 Tổng quan tuần này</Text>
-        <View style={styles.summaryGrid}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNumber}>{weeklySummary.expenseCount}</Text>
-            <Text style={styles.summaryLabel}>Giao dịch chi</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNumber}>
-              {weeklySummary.totalExpense.toLocaleString()}
-            </Text>
-            <Text style={styles.summaryLabel}>Tổng chi</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryNumber}>
-              {Math.round(weeklySummary.avgDailyExpense).toLocaleString()}
-            </Text>
-            <Text style={styles.summaryLabel}>Trung bình/ngày</Text>
-          </View>
+      {/* Thống kê nhanh */}
+      <View style={styles.quickStats}>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>
+            {viewMode === 'week' ? weeklySummary.expenseCount : monthStats.expenseCount}
+          </Text>
+          <Text style={styles.statLabel}>Giao dịch</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>
+            {viewMode === 'week' 
+              ? formatSmartCurrency(weeklySummary.totalExpense)
+              : formatSmartCurrency(monthStats.totalExpense)}
+          </Text>
+          <Text style={styles.statLabel}>Tổng chi</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>
+            {viewMode === 'week'
+              ? formatSmartCurrency(weeklySummary.avgDailyExpense)
+              : formatSmartCurrency(monthStats.avgDailyExpense)}
+          </Text>
+          <Text style={styles.statLabel}>TB/ngày</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statValue}>
+            {viewMode === 'week' 
+              ? dailyData.filter(d => d.totalExpense > 0).length
+              : monthStats.daysPassed}
+          </Text>
+          <Text style={styles.statLabel}>
+            {viewMode === 'week' ? 'Ngày chi' : 'Ngày đã qua'}
+          </Text>
         </View>
       </View>
 
       {/* Ngày chi mạnh nhất */}
-      {maxSpendingDay && maxSpendingDay.totalExpense > 0 && (
-        <View style={styles.highlightCard}>
-          <Text style={styles.highlightTitle}>🔥 Ngày chi mạnh nhất</Text>
+      {maxSpendingDay && (
+        <View style={[styles.highlightCard, maxSpendingDay.totalExpense > 0 ? styles.highlightActive : styles.highlightInactive]}>
+          <View style={styles.highlightHeader}>
+            <Text style={styles.flameIcon}>🔥</Text>
+            <Text style={styles.highlightTitle}>Ngày chi nhiều nhất</Text>
+          </View>
           <View style={styles.highlightContent}>
             <Text style={styles.highlightDate}>
-              {formatDate(maxSpendingDay.date)}
+              {formatFullDate(maxSpendingDay.date)}
             </Text>
             <Text style={styles.highlightAmount}>
-              {maxSpendingDay.totalExpense.toLocaleString()} VND
+              {maxSpendingDay.totalExpense > 0 
+                ? formatSmartCurrency(maxSpendingDay.totalExpense)
+                : 'Chưa có chi tiêu'}
             </Text>
-            <Text style={styles.highlightSubtext}>
-              {maxSpendingDay.expenses.length} giao dịch
-            </Text>
+            {maxSpendingDay.expenseCount > 0 && (
+              <Text style={styles.highlightDetail}>
+                {maxSpendingDay.expenseCount} giao dịch
+              </Text>
+            )}
           </View>
         </View>
       )}
 
-      {/* Chi tiết từng ngày */}
-      <View style={styles.dailyList}>
-        <Text style={styles.dailyListTitle}>Chi tiết từng ngày</Text>
+      {/* Danh sách chi tiết */}
+      <View style={styles.detailSection}>
+        <Text style={styles.sectionTitle}>
+          {viewMode === 'week' ? '7 ngày qua' : `${monthStats.daysPassed} ngày qua`}
+        </Text>
         
-        {last7Days.map((day, index) => (
-          <View key={index} style={styles.dayCard}>
-            <View style={styles.dayHeader}>
-              <Text style={styles.dayDate}>{formatDate(day.date)}</Text>
-              <Text style={styles.dayTotal}>
-                {day.totalExpense.toLocaleString()} VND
+        {(viewMode === 'week' ? last7Days : monthDaysData.slice(-monthStats.daysPassed)).map((day, index) => (
+          <TouchableOpacity 
+            key={index} 
+            style={[
+              styles.dayRow,
+              day.totalExpense > 0 && styles.dayRowHasExpense,
+              index === 0 && viewMode === 'week' && styles.dayRowToday
+            ]}
+            onPress={() => console.log('Xem chi tiết ngày:', day.date)}
+          >
+            <View style={styles.dayInfo}>
+              <Text style={[
+                styles.dayName,
+                index === 0 && viewMode === 'week' && styles.dayNameToday
+              ]}>
+                {formatDate(day.date)}
               </Text>
+              {day.expenseCount > 0 && (
+                <Text style={styles.dayCount}>{day.expenseCount} GD</Text>
+              )}
             </View>
             
-            {day.expenses.length > 0 ? (
-              <View style={styles.dayDetails}>
-                {day.expenses.slice(0, 3).map((expense, idx) => (
-                  <View key={idx} style={styles.expenseItem}>
-                    <Text style={styles.expenseTitle} numberOfLines={1}>
-                      {expense.title}
-                    </Text>
-                    <Text style={styles.expenseAmount}>
-                      {expense.amount.toLocaleString()} VND
-                    </Text>
-                  </View>
-                ))}
-                
-                {day.expenses.length > 3 && (
-                  <Text style={styles.moreText}>
-                    + {day.expenses.length - 3} giao dịch khác
-                  </Text>
-                )}
-              </View>
-            ) : (
-              <Text style={styles.noExpenseText}>Không có chi tiêu</Text>
-            )}
-            
-            {day.totalIncome > 0 && (
-              <View style={styles.incomeBadge}>
-                <Text style={styles.incomeText}>
-                  💰 Thu nhập: {day.totalIncome.toLocaleString()} VND
+            <View style={styles.dayAmounts}>
+              {day.totalExpense > 0 && (
+                <Text style={styles.expenseAmount}>
+                  {formatSmartCurrency(day.totalExpense)}
                 </Text>
-              </View>
-            )}
-          </View>
+              )}
+              {day.totalIncome > 0 && (
+                <Text style={styles.incomeAmount}>
+                  +{formatSmartCurrency(day.totalIncome)}
+                </Text>
+              )}
+              {day.totalExpense === 0 && day.totalIncome === 0 && (
+                <Text style={styles.noDataText}>--</Text>
+              )}
+            </View>
+            
+            {/* Thanh chỉ số visual */}
+            <View style={styles.progressBarContainer}>
+              <View 
+                style={[
+                  styles.progressBar,
+                  { 
+                    width: maxSpendingDay?.totalExpense > 0 
+                      ? `${Math.min((day.totalExpense / maxSpendingDay.totalExpense) * 100, 100)}%`
+                      : '0%',
+                    opacity: day.totalExpense > 0 ? 0.7 : 0
+                  }
+                ]}
+              />
+            </View>
+          </TouchableOpacity>
         ))}
+      </View>
+
+      {/* Tips */}
+      <View style={styles.tipsContainer}>
+        <Text style={styles.tipsTitle}>💡 Mẹo theo dõi hàng ngày</Text>
+        <Text style={styles.tipText}>
+          • Kiểm tra chi tiêu cuối ngày để điều chỉnh
+        </Text>
+        <Text style={styles.tipText}>
+          • Hạn chế chi vào ngày đã vượt trung bình
+        </Text>
+        <Text style={styles.tipText}>
+          • Cuối tuần, tổng kết và lập kế hoạch tuần mới
+        </Text>
       </View>
     </ScrollView>
   );
@@ -345,21 +547,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f8fafc',
-    padding: 16,
+    paddingHorizontal: 16,
   },
   header: {
+    paddingTop: 20,
+    paddingBottom: 16,
     alignItems: 'center',
-    marginBottom: 20,
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#1f2937',
+    marginBottom: 4,
   },
   subtitle: {
     fontSize: 14,
     color: '#6b7280',
-    marginTop: 4,
   },
   toggleContainer: {
     flexDirection: 'row',
@@ -367,15 +570,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 4,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   toggleButton: {
     flex: 1,
-    padding: 12,
+    paddingVertical: 10,
     borderRadius: 8,
     alignItems: 'center',
   },
@@ -384,7 +584,7 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#6b7280',
   },
   toggleTextActive: {
@@ -394,12 +594,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 16,
     borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   chartTitle: {
     fontSize: 16,
@@ -417,173 +614,186 @@ const styles = StyleSheet.create({
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   legendText: {
     fontSize: 12,
     color: '#6b7280',
   },
-  summaryCard: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  summaryTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  summaryGrid: {
+  quickStats: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
-  summaryItem: {
-    alignItems: 'center',
+  statBox: {
     flex: 1,
+    alignItems: 'center',
   },
-  summaryNumber: {
-    fontSize: 20,
+  statValue: {
+    fontSize: 16,
     fontWeight: '700',
     color: '#3b82f6',
     marginBottom: 4,
   },
-  summaryLabel: {
-    fontSize: 12,
+  statLabel: {
+    fontSize: 11,
     color: '#6b7280',
     textAlign: 'center',
   },
   highlightCard: {
-    backgroundColor: '#fef3c7',
     padding: 16,
     borderRadius: 12,
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
+  },
+  highlightActive: {
+    backgroundColor: '#fef3c7',
     borderColor: '#fcd34d',
+  },
+  highlightInactive: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
+  },
+  highlightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  flameIcon: {
+    fontSize: 20,
   },
   highlightTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: '#92400e',
-    marginBottom: 12,
-    textAlign: 'center',
   },
   highlightContent: {
     alignItems: 'center',
   },
   highlightDate: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '500',
     color: '#92400e',
     marginBottom: 4,
+    textAlign: 'center',
   },
   highlightAmount: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
     color: '#ef4444',
     marginBottom: 4,
+    textAlign: 'center',
   },
-  highlightSubtext: {
+  highlightDetail: {
     fontSize: 14,
     color: '#92400e',
   },
-  dailyList: {
-    marginBottom: 20,
+  detailSection: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
-  dailyListTitle: {
-    fontSize: 18,
+  sectionTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 16,
   },
-  dayCard: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  dayHeader: {
+  dayRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    paddingBottom: 12,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
-  dayDate: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+  dayRowHasExpense: {
+    backgroundColor: '#fafafa',
   },
-  dayTotal: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#ef4444',
+  dayRowToday: {
+    backgroundColor: '#f0f9ff',
   },
-  dayDetails: {
-    marginBottom: 12,
-  },
-  expenseItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f9fafb',
-  },
-  expenseTitle: {
-    fontSize: 14,
-    color: '#4b5563',
+  dayInfo: {
     flex: 1,
+  },
+  dayName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+    marginBottom: 2,
+  },
+  dayNameToday: {
+    color: '#3b82f6',
+    fontWeight: '600',
+  },
+  dayCount: {
+    fontSize: 11,
+    color: '#9ca3af',
+  },
+  dayAmounts: {
+    alignItems: 'flex-end',
     marginRight: 12,
   },
   expenseAmount: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1f2937',
+    color: '#ef4444',
+    marginBottom: 2,
   },
-  moreText: {
+  incomeAmount: {
+    fontSize: 12,
+    color: '#10b981',
+    fontWeight: '500',
+  },
+  noDataText: {
     fontSize: 12,
     color: '#9ca3af',
     fontStyle: 'italic',
-    textAlign: 'center',
-    marginTop: 8,
   },
-  noExpenseText: {
+  progressBarContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: '#f3f4f6',
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#ef4444',
+    borderRadius: 1,
+  },
+  tipsContainer: {
+    backgroundColor: '#f0f9ff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#e0f2fe',
+  },
+  tipsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0369a1',
+    marginBottom: 12,
+  },
+  tipText: {
     fontSize: 14,
-    color: '#9ca3af',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    paddingVertical: 12,
-  },
-  incomeBadge: {
-    backgroundColor: '#d1fae5',
-    padding: 8,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  incomeText: {
-    fontSize: 14,
-    color: '#065f46',
-    fontWeight: '500',
+    color: '#4b5563',
+    marginBottom: 8,
+    lineHeight: 20,
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,46 +7,62 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
-} from 'react-native';
-import { useSelector } from 'react-redux';
-import { ProgressBar } from 'react-native-paper';
-import BudgetManager from '../utils/BudgetManager';
-import monthlyManager from '../utils/monthlyManager';
+} from "react-native";
+import { useSelector } from "react-redux";
+import { ProgressBar } from "react-native-paper";
+import BudgetManager from "../utils/BudgetManager";
+import monthlyManager from "../utils/monthlyManager";
 
 const BudgetScreen = () => {
   const expenses = useSelector((state) => state.expenses.items);
   const incomes = useSelector((state) => state.incomes.items);
-  
+
   const [budgets, setBudgets] = useState([]);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [editValue, setEditValue] = useState('');
+  const [editValue, setEditValue] = useState("");
   const [totalStats, setTotalStats] = useState({});
+  const [isInitialized, setIsInitialized] = useState(false);
 
+  // Chỉ chạy 1 lần khi mount
   useEffect(() => {
-    initializeBudgets();
-  }, [expenses]);
+    const initialize = async () => {
+      await BudgetManager.initialize();
+      setIsInitialized(true);
+    };
+    initialize();
+  }, []);
 
-  const initializeBudgets = async () => {
-    await BudgetManager.initialize();
-    
-    // Cập nhật chi tiêu thực tế vào ngân sách
-    const currentMonth = monthlyManager.getCurrentMonthInfo();
-    const monthExpenses = expenses.filter(e => e.monthId === currentMonth.id);
-    
-    monthExpenses.forEach(expense => {
-      BudgetManager.addExpenseToCategory(expense.category, expense.amount);
-    });
-    
-    // Lấy ngân sách hiện tại
-    const categoryBudgets = BudgetManager.getCategoryBudgets();
-    const stats = BudgetManager.getTotalBudget();
-    
-    setBudgets(categoryBudgets);
-    setTotalStats(stats);
+  // Khi expenses thay đổi hoặc đã initialized, tính toán lại chi tiêu
+  useEffect(() => {
+    if (isInitialized && expenses) {
+      updateBudgetsFromExpenses();
+    }
+  }, [expenses, isInitialized]);
+
+  const updateBudgetsFromExpenses = async () => {
+    try {
+      // Lấy chi tiêu tháng hiện tại
+      const currentMonth = monthlyManager.getCurrentMonthInfo();
+      const monthExpenses = expenses.filter(
+        (e) => e.monthId === currentMonth.id
+      );
+
+      // Tính toán chi tiêu từ expenses thực tế
+      await BudgetManager.calculateSpendingFromExpenses(monthExpenses);
+
+      // Lấy ngân sách hiện tại
+      const categoryBudgets = BudgetManager.getCategoryBudgets();
+      const stats = BudgetManager.getTotalBudget();
+
+      setBudgets(categoryBudgets);
+      setTotalStats(stats);
+    } catch (error) {
+      console.error("❌ Error updating budgets:", error);
+    }
   };
 
   const handleEditBudget = (categoryId) => {
-    const category = budgets.find(b => b.id === categoryId);
+    const category = budgets.find((b) => b.id === categoryId);
     if (category) {
       setEditingCategory(categoryId);
       setEditValue(category.monthlyBudget.toString());
@@ -54,51 +70,61 @@ const BudgetScreen = () => {
   };
 
   const handleSaveBudget = async (categoryId) => {
-    if (editValue === '' || isNaN(editValue)) {
-      Alert.alert('Lỗi', 'Vui lòng nhập số tiền hợp lệ');
+    if (editValue === "" || isNaN(editValue)) {
+      Alert.alert("Lỗi", "Vui lòng nhập số tiền hợp lệ");
       return;
     }
 
-    const success = await BudgetManager.updateBudget(categoryId, Number(editValue));
+    const success = await BudgetManager.updateBudget(
+      categoryId,
+      Number(editValue)
+    );
     if (success) {
+      // Cập nhật UI sau khi lưu
       const updatedBudgets = BudgetManager.getCategoryBudgets();
       const stats = BudgetManager.getTotalBudget();
-      
+
       setBudgets(updatedBudgets);
       setTotalStats(stats);
       setEditingCategory(null);
-      setEditValue('');
-      
-      Alert.alert('Thành công', 'Đã cập nhật ngân sách');
+      setEditValue("");
+
+      Alert.alert("Thành công", "Đã cập nhật ngân sách");
     }
   };
 
   const handleApplyRecommendations = async () => {
     const currentMonth = monthlyManager.getCurrentMonthInfo();
-    const monthIncomes = incomes.filter(i => i.monthId === currentMonth.id);
+    const monthIncomes = incomes.filter((i) => i.monthId === currentMonth.id);
     const totalIncome = monthIncomes.reduce((sum, i) => sum + i.amount, 0);
-    
+
     if (totalIncome <= 0) {
-      Alert.alert('Thông báo', 'Vui lòng thêm thu nhập trước khi áp dụng gợi ý ngân sách');
+      Alert.alert(
+        "Thông báo",
+        "Vui lòng thêm thu nhập trước khi áp dụng gợi ý ngân sách"
+      );
       return;
     }
 
     Alert.alert(
-      'Áp dụng gợi ý ngân sách',
-      `Dựa trên tổng thu nhập ${(totalIncome || 0).toLocaleString('vi-VN')} VND, hệ thống sẽ đề xuất ngân sách phù hợp. Tiếp tục?`,
+      "Áp dụng gợi ý ngân sách",
+      `Dựa trên tổng thu nhập ${(totalIncome || 0).toLocaleString(
+        "vi-VN"
+      )} VND, hệ thống sẽ đề xuất ngân sách phù hợp. Tiếp tục?`,
       [
-        { text: 'Hủy', style: 'cancel' },
+        { text: "Hủy", style: "cancel" },
         {
-          text: 'Áp dụng',
+          text: "Áp dụng",
           onPress: async () => {
             await BudgetManager.applyRecommendations(totalIncome);
+            // Cập nhật UI
             const updatedBudgets = BudgetManager.getCategoryBudgets();
             const stats = BudgetManager.getTotalBudget();
-            
+
             setBudgets(updatedBudgets);
             setTotalStats(stats);
-            
-            Alert.alert('Thành công', 'Đã áp dụng gợi ý ngân sách');
+
+            Alert.alert("Thành công", "Đã áp dụng gợi ý ngân sách");
           },
         },
       ]
@@ -107,34 +133,49 @@ const BudgetScreen = () => {
 
   const handleResetSpending = () => {
     Alert.alert(
-      'Đặt lại chi tiêu',
-      'Bạn có chắc muốn đặt lại chi tiêu của tất cả danh mục về 0? Hành động này không thể hoàn tác.',
+      "Đặt lại chi tiêu",
+      "Bạn có chắc muốn đặt lại chi tiêu của tất cả danh mục về 0?",
       [
-        { text: 'Hủy', style: 'cancel' },
+        { text: "Hủy", style: "cancel" },
         {
-          text: 'Đặt lại',
-          style: 'destructive',
+          text: "Đặt lại",
+          style: "destructive",
           onPress: async () => {
-            BudgetManager.resetMonthlySpending();
+            await BudgetManager.resetMonthlySpending();
+            // Cập nhật UI
             const updatedBudgets = BudgetManager.getCategoryBudgets();
             const stats = BudgetManager.getTotalBudget();
-            
+
             setBudgets(updatedBudgets);
             setTotalStats(stats);
-            
-            Alert.alert('Thành công', 'Đã đặt lại chi tiêu');
+
+            Alert.alert("Thành công", "Đã đặt lại chi tiêu");
           },
         },
       ]
     );
   };
 
-  const getProgressColor = (percentage, isOverBudget) => {
-    if (isOverBudget) return '#ef4444';
-    if (percentage >= 90) return '#f59e0b';
-    if (percentage >= 70) return '#3b82f6';
-    return '#10b981';
+  const handleRefreshBudgets = () => {
+    updateBudgetsFromExpenses();
+    Alert.alert("Thành công", "Đã cập nhật chi tiêu từ giao dịch");
   };
+
+  const getProgressColor = (percentage, isOverBudget) => {
+    if (isOverBudget) return "#ef4444";
+    if (percentage >= 90) return "#f59e0b";
+    if (percentage >= 70) return "#3b82f6";
+    return "#10b981";
+  };
+
+  // Hiển thị loading nếu chưa initialized
+  if (!isInitialized) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Đang tải ngân sách...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -150,23 +191,35 @@ const BudgetScreen = () => {
         <View style={styles.summaryStats}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Tổng ngân sách</Text>
-            <Text style={styles.summaryValue}>{(totalStats?.totalBudget || 0).toLocaleString('vi-VN')} VND</Text>
+            <Text style={styles.summaryValue}>
+              {(totalStats?.totalBudget || 0).toLocaleString("vi-VN")} VND
+            </Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Đã chi tiêu</Text>
-            <Text style={styles.summaryValue}>{(totalStats?.totalSpent || 0).toLocaleString('vi-VN')} VND</Text>
+            <Text style={styles.summaryValue}>
+              {(totalStats?.totalSpent || 0).toLocaleString("vi-VN")} VND
+            </Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Còn lại</Text>
             <Text style={[styles.summaryValue, styles.remainingValue]}>
-              {(totalStats?.remaining || 0).toLocaleString('vi-VN')} VND
+              {(totalStats?.remaining || 0).toLocaleString("vi-VN")} VND
             </Text>
           </View>
         </View>
-        
+
         <ProgressBar
-          progress={totalStats?.totalBudget > 0 ? (totalStats?.totalSpent || 0) / (totalStats?.totalBudget || 1) : 0}
-          color={(totalStats?.totalSpent || 0) > (totalStats?.totalBudget || 0) ? '#ef4444' : '#10b981'}
+          progress={
+            totalStats?.totalBudget > 0
+              ? (totalStats?.totalSpent || 0) / (totalStats?.totalBudget || 1)
+              : 0
+          }
+          color={
+            (totalStats?.totalSpent || 0) > (totalStats?.totalBudget || 0)
+              ? "#ef4444"
+              : "#10b981"
+          }
           style={styles.summaryProgress}
         />
       </View>
@@ -180,18 +233,24 @@ const BudgetScreen = () => {
           <Text style={styles.actionButtonText}>📊 Gợi ý ngân sách</Text>
         </TouchableOpacity>
         <TouchableOpacity
+          style={[styles.actionButton, styles.refreshButton]}
+          onPress={handleRefreshBudgets}
+        >
+          <Text style={styles.actionButtonText}>🔄 Cập nhật</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.actionButton, styles.resetButton]}
           onPress={handleResetSpending}
         >
-          <Text style={styles.actionButtonText}>🔄 Đặt lại chi tiêu</Text>
+          <Text style={styles.actionButtonText}>🗑️ Đặt lại chi</Text>
         </TouchableOpacity>
       </View>
 
       {/* Danh sách ngân sách theo danh mục */}
       <View style={styles.budgetsList}>
         <Text style={styles.sectionTitle}>Ngân sách từng danh mục</Text>
-        
-        {budgets.map(category => (
+
+        {budgets.map((category) => (
           <View key={category.id} style={styles.budgetCard}>
             <View style={styles.budgetHeader}>
               <View style={styles.categoryInfo}>
@@ -200,15 +259,18 @@ const BudgetScreen = () => {
                   <Text style={styles.categoryName}>{category.name}</Text>
                   <View style={styles.categoryMeta}>
                     <Text style={styles.categorySpent}>
-                      Đã chi: {(category?.spent || 0).toLocaleString('vi-VN')} VND
+                      Đã chi: {(category?.spent || 0).toLocaleString("vi-VN")}{" "}
+                      VND
                     </Text>
                     {category.isOverBudget && (
-                      <Text style={styles.overBudgetText}>⚠️ Vượt ngân sách</Text>
+                      <Text style={styles.overBudgetText}>
+                        ⚠️ Vượt ngân sách
+                      </Text>
                     )}
                   </View>
                 </View>
               </View>
-              
+
               <View style={styles.budgetAmount}>
                 {editingCategory === category.id ? (
                   <View style={styles.editContainer}>
@@ -228,9 +290,12 @@ const BudgetScreen = () => {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  <TouchableOpacity onPress={() => handleEditBudget(category.id)}>
+                  <TouchableOpacity
+                    onPress={() => handleEditBudget(category.id)}
+                  >
                     <Text style={styles.budgetValue}>
-                      {(category?.monthlyBudget || 0).toLocaleString('vi-VN')} VND
+                      {(category?.monthlyBudget || 0).toLocaleString("vi-VN")}{" "}
+                      VND
                     </Text>
                     <Text style={styles.editHint}>Chạm để sửa</Text>
                   </TouchableOpacity>
@@ -245,27 +310,39 @@ const BudgetScreen = () => {
                   {(category?.percentage || 0).toFixed(1)}%
                 </Text>
                 <Text style={styles.remainingText}>
-                  Còn: {(category?.remaining || 0).toLocaleString('vi-VN')} VND
+                  Còn: {(category?.remaining || 0).toLocaleString("vi-VN")} VND
                 </Text>
               </View>
               <ProgressBar
                 progress={(category?.percentage || 0) / 100}
-                color={getProgressColor(category?.percentage || 0, category?.isOverBudget || false)}
+                color={getProgressColor(
+                  category?.percentage || 0,
+                  category?.isOverBudget || false
+                )}
                 style={styles.progressBar}
               />
             </View>
 
             {/* Cảnh báo nếu có */}
             {category?.percentage >= 80 && (
-              <View style={[
-                styles.warningBox,
-                category?.percentage >= 100 ? styles.warningDanger : 
-                category?.percentage >= 90 ? styles.warningWarning : styles.warningInfo
-              ]}>
+              <View
+                style={[
+                  styles.warningBox,
+                  category?.percentage >= 100
+                    ? styles.warningDanger
+                    : category?.percentage >= 90
+                    ? styles.warningWarning
+                    : styles.warningInfo,
+                ]}
+              >
                 <Text style={styles.warningText}>
-                  {category?.percentage >= 100 
-                    ? `🚨 Đã vượt ${Math.abs(category?.remaining || 0).toLocaleString('vi-VN')} VND so với ngân sách!`
-                    : `⚠️ Đã sử dụng ${(category?.percentage || 0).toFixed(1)}% ngân sách`}
+                  {category?.percentage >= 100
+                    ? `🚨 Đã vượt ${Math.abs(
+                        category?.remaining || 0
+                      ).toLocaleString("vi-VN")} VND so với ngân sách!`
+                    : `⚠️ Đã sử dụng ${(category?.percentage || 0).toFixed(
+                        1
+                      )}% ngân sách`}
                 </Text>
               </View>
             )}
@@ -277,10 +354,16 @@ const BudgetScreen = () => {
       <View style={styles.tipsCard}>
         <Text style={styles.tipsTitle}>💡 Mẹo quản lý ngân sách</Text>
         <View style={styles.tipsList}>
-          <Text style={styles.tipItem}>• Đặt ngân sách thực tế cho từng danh mục</Text>
-          <Text style={styles.tipItem}>• Kiểm tra thường xuyên để điều chỉnh kịp thời</Text>
-          <Text style={styles.tipItem}>• Sử dụng gợi ý ngân sách dựa trên thu nhập</Text>
-          <Text style={styles.tipItem}>• Ưu tiên ngân sách cho nhu cầu thiết yếu trước</Text>
+          <Text style={styles.tipItem}>
+            • Đặt ngân sách thực tế cho từng danh mục
+          </Text>
+          <Text style={styles.tipItem}>
+            • Kiểm tra thường xuyên để điều chỉnh kịp thời
+          </Text>
+          <Text style={styles.tipItem}>
+            • Sử dụng nút "Cập nhật" để đồng bộ chi tiêu
+          </Text>
+          <Text style={styles.tipItem}>• Đặt lại chi tiêu đầu mỗi tháng</Text>
         </View>
       </View>
     </ScrollView>
@@ -290,29 +373,39 @@ const BudgetScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: "#f8fafc",
     padding: 16,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#6b7280",
+  },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 20,
   },
   title: {
     fontSize: 24,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontWeight: "700",
+    color: "#1f2937",
   },
   subtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: "#6b7280",
     marginTop: 4,
   },
   summaryCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 20,
     borderRadius: 16,
     marginBottom: 16,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
@@ -320,88 +413,92 @@ const styles = StyleSheet.create({
   },
   summaryTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: "600",
+    color: "#1f2937",
     marginBottom: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   summaryStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 12,
   },
   summaryItem: {
-    alignItems: 'center',
+    alignItems: "center",
     flex: 1,
   },
   summaryLabel: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
     marginBottom: 4,
   },
   summaryValue: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontWeight: "700",
+    color: "#1f2937",
   },
   remainingValue: {
-    color: '#10b981',
+    color: "#10b981",
   },
   summaryProgress: {
     height: 8,
     borderRadius: 4,
   },
   actionButtons: {
-    flexDirection: 'row',
-    gap: 12,
+    flexDirection: "row",
+    gap: 8,
     marginBottom: 20,
   },
   actionButton: {
     flex: 1,
-    padding: 14,
+    padding: 12,
     borderRadius: 10,
-    alignItems: 'center',
+    alignItems: "center",
   },
   recommendButton: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: "#3b82f6",
+  },
+  refreshButton: {
+    backgroundColor: "#8b5cf6",
   },
   resetButton: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: "#f59e0b",
   },
   actionButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
   },
   budgetsList: {
     marginBottom: 20,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: "600",
+    color: "#1f2937",
     marginBottom: 16,
   },
   budgetCard: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     padding: 16,
     borderRadius: 12,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
   },
   budgetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 12,
   },
   categoryInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   categoryIcon: {
@@ -410,80 +507,80 @@ const styles = StyleSheet.create({
   },
   categoryName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: "600",
+    color: "#1f2937",
     marginBottom: 4,
   },
   categoryMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
   categorySpent: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
   },
   overBudgetText: {
     fontSize: 10,
-    color: '#ef4444',
-    fontWeight: '500',
-    backgroundColor: '#fee2e2',
+    color: "#ef4444",
+    fontWeight: "500",
+    backgroundColor: "#fee2e2",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
   },
   budgetAmount: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   budgetValue: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontWeight: "700",
+    color: "#1f2937",
   },
   editHint: {
     fontSize: 10,
-    color: '#6b7280',
+    color: "#6b7280",
     marginTop: 2,
-    textAlign: 'right',
+    textAlign: "right",
   },
   editContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   editInput: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: "#e5e7eb",
     borderRadius: 6,
     padding: 6,
     width: 100,
-    backgroundColor: '#f9fafb',
+    backgroundColor: "#f9fafb",
     marginRight: 8,
   },
   saveButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: "#10b981",
     padding: 6,
     borderRadius: 6,
   },
   saveButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+    color: "#fff",
+    fontWeight: "bold",
   },
   progressContainer: {
     marginBottom: 8,
   },
   progressLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
   progressText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
+    fontWeight: "600",
+    color: "#1f2937",
   },
   remainingText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: "#6b7280",
   },
   progressBar: {
     height: 8,
@@ -495,36 +592,37 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   warningDanger: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: "#fee2e2",
     borderWidth: 1,
-    borderColor: '#fca5a5',
+    borderColor: "#fca5a5",
   },
   warningWarning: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: "#fef3c7",
     borderWidth: 1,
-    borderColor: '#fcd34d',
+    borderColor: "#fcd34d",
   },
   warningInfo: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: "#dbeafe",
     borderWidth: 1,
-    borderColor: '#93c5fd',
+    borderColor: "#93c5fd",
   },
   warningText: {
     fontSize: 12,
-    fontWeight: '500',
-    textAlign: 'center',
+    fontWeight: "500",
+    textAlign: "center",
   },
   tipsCard: {
-    backgroundColor: '#f0f9ff',
+    backgroundColor: "#f0f9ff",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#bae6fd',
+    borderColor: "#bae6fd",
+    marginBottom: 20,
   },
   tipsTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#0369a1',
+    fontWeight: "600",
+    color: "#0369a1",
     marginBottom: 8,
   },
   tipsList: {
@@ -532,7 +630,7 @@ const styles = StyleSheet.create({
   },
   tipItem: {
     fontSize: 14,
-    color: '#0369a1',
+    color: "#0369a1",
     marginBottom: 4,
   },
 });
